@@ -160,7 +160,13 @@ module WsClient
           end
 
           if msg = frame.next
-            message_queue << msg
+            case msg.type
+            when :ping
+              send_data_and_wait(msg.data, 10, :type => :pong)
+            else
+              message_queue << msg
+            end
+
             pull_next_message_off_of_socket(socket, MS_2) # 2ms penalty for new frames
           else
             pull_next_message_off_of_socket(socket, timeout, frame)
