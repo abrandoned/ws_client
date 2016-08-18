@@ -62,13 +62,8 @@ module WsClient
       connect(nil)
     end
 
-    def send_data(data, opt={:type => :text})
-      @thread ||= poll # utilize the polling interface, could probably be split into another class
-      write_data(data, opt)
-    end
-
     # Returns all responses that have been accepted
-    def send_data_and_wait(data, timeout, opt = { :type => :text })
+    def send_data_and_wait(data, timeout = MS_2, opt = { :type => :text })
       response_data = []
       write_data(data, opt)
       pull_next_message_off_of_socket(@socket, timeout)
@@ -82,6 +77,7 @@ module WsClient
 
       response_data
     end
+    alias_method :send_data, :send_data_and_wait
 
     def close
       return if @closed
@@ -92,7 +88,6 @@ module WsClient
       @closed = true
       @socket.close if @socket
       @socket = nil
-      Thread.kill @thread if @thread
     end
 
     def closed?
@@ -132,18 +127,6 @@ module WsClient
       end
 
       emit :open if @handshaked
-    end
-
-    def poll
-      return Thread.new(@socket) do |socket|
-        while !@closed do
-          pull_next_message_off_of_socket(socket)
-
-          message_queue.length.times do
-            emit :message, message_queue.pop
-          end
-        end
-      end
     end
 
     def pull_next_message_off_of_socket(socket, timeout = 10, last_frame = nil)
@@ -201,6 +184,31 @@ module WsClient
       rescue => e
         close
         emit :error, e
+      end
+    end
+  end
+
+  class AsyncClient < ::WsClient::Client
+    def close
+      super
+    ensure
+      Thread.kill @thread if @thread
+    end
+
+    def send_data(data, opt={:type => :text})
+      @thread ||= poll # utilize the polling interface, could probably be split into another class
+      write_data(data, opt)
+    end
+
+    def poll
+      return Thread.new(@socket) do |socket|
+        while !@closed do
+          pull_next_message_off_of_socket(socket)
+
+          message_queue.length.times do
+            emit :message, message_queue.pop
+          end
+        end
       end
     end
   end
