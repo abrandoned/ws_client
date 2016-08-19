@@ -67,7 +67,6 @@ module WsClient
       response_data = []
       write_data(data, opt)
       pull_next_message_off_of_socket(@socket, timeout)
-      pull_next_message_off_of_socket(@socket, MS_2) # 2ms penalty to check for additional messages
 
       if message_queue.length > 0
         message_queue.length.times do
@@ -82,7 +81,7 @@ module WsClient
     def close
       return if @closed
 
-      send_data nil, MS_2, :type => :close if !@pipe_broken
+      write_data nil, :type => :close if !@pipe_broken
       emit :close
     ensure
       @closed = true
@@ -192,7 +191,7 @@ module WsClient
     def close
       return if @closed
 
-      send_data nil, :type => :close if !@pipe_broken
+      write_data nil, :type => :close if !@pipe_broken
       emit :close
     ensure
       @closed = true
