@@ -82,7 +82,7 @@ module WsClient
     def close
       return if @closed
 
-      send_data nil, :type => :close if !@pipe_broken
+      send_data nil, MS_2, :type => :close if !@pipe_broken
       emit :close
     ensure
       @closed = true
@@ -190,8 +190,14 @@ module WsClient
 
   class AsyncClient < ::WsClient::Client
     def close
-      super
+      return if @closed
+
+      send_data nil, :type => :close if !@pipe_broken
+      emit :close
     ensure
+      @closed = true
+      @socket.close if @socket
+      @socket = nil
       Thread.kill @thread if @thread
     end
 
