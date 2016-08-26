@@ -48,7 +48,9 @@ module WsClient
         ctx
         end
 
-        @socket = ::OpenSSL::SSL::SSLSocket.new(@socket, ssl_context)
+        # Keep a handle to the TCPSocket, because the SSLSocket will not clean it up for us.
+        @tcp_socket = @socket
+        @socket = ::OpenSSL::SSL::SSLSocket.new(@tcp_socket, ssl_context)
         @socket.connect
       end
 
@@ -86,7 +88,9 @@ module WsClient
     ensure
       @closed = true
       @socket.close if @socket
+      @tcp_socket.close if @tcp_socket
       @socket = nil
+      @tcp_socket = nil
     end
 
     def closed?
@@ -196,7 +200,9 @@ module WsClient
     ensure
       @closed = true
       @socket.close if @socket
+      @tcp_socket.close if @tcp_socket
       @socket = nil
+      @tcp_socket = nil
       Thread.kill @thread if @thread
     end
 
