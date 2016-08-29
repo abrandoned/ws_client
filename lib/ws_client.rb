@@ -58,6 +58,11 @@ module WsClient
       @closed = false
 
       handshake
+    rescue OpenSSL::SSL::SSLError, EOFError
+      # Re-use the socket cleanup logic if we have a connect failure.
+      @pipe_broken = true
+      close
+      raise
     end
 
     def reconnect
