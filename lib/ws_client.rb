@@ -58,6 +58,11 @@ module WsClient
       @closed = false
 
       handshake
+    rescue OpenSSL::SSL::SSLError, EOFError
+      # Re-use the socket cleanup logic if we have a connect failure.
+      @pipe_broken = true
+      close
+      raise
     end
 
     def reconnect
@@ -172,21 +177,27 @@ module WsClient
 
     def write_data(data, opt)
       frame = ::WebSocket::Frame::Outgoing::Client.new(:data => data, :type => opt[:type], :version => @handshake.version)
+      frame_str = frame.to_s
 
-      begin
-        @socket.write_nonblock(frame.to_s)
-      rescue IO::WaitReadable
-        IO.select([@socket]) # OpenSSL needs to read internally
-        retry
-      rescue IO::WaitWritable, Errno::EINTR
-        IO.select(nil, [@socket])
-        retry
-      rescue Errno::EPIPE => e
-        @pipe_broken = true
-        close
-      rescue => e
-        close
-        emit :error, e
+      loop do
+        break if frame_str.empty? || @closed
+
+        begin
+          num_bytes_written = @socket.write_nonblock(frame_str)
+          frame_str = frame_str[num_bytes_written..-1]
+        rescue IO::WaitReadable
+          IO.select([@socket]) # OpenSSL needs to read internally
+          retry
+        rescue IO::WaitWritable, Errno::EINTR
+          IO.select(nil, [@socket])
+          retry
+        rescue Errno::EPIPE => e
+          @pipe_broken = true
+          close
+        rescue => e
+          close
+          emit :error, e
+        end
       end
     end
   end
