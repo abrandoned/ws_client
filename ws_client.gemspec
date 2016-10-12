@@ -34,5 +34,4 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "pry"
 
   spec.add_dependency "websocket"
-  spec.add_dependency "event_emitter"
 end

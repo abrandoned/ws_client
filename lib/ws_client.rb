@@ -1,5 +1,4 @@
 require 'thread'
-require 'event_emitter'
 require 'websocket'
 require 'socket'
 require 'openssl'
@@ -15,7 +14,6 @@ module WsClient
   end
 
   class Client
-    include EventEmitter
     attr_reader :url, :handshake, :message_queue, :connect_options
 
     MS_2 = (1/500.0)
@@ -54,13 +52,11 @@ module WsClient
         @socket.connect
       end
 
-      @pipe_broken = false
       @closed = false
 
       handshake
     rescue OpenSSL::SSL::SSLError, EOFError
       # Re-use the socket cleanup logic if we have a connect failure.
-      @pipe_broken = true
       close
       raise
     end
@@ -88,8 +84,7 @@ module WsClient
     def close
       return if @closed
 
-      write_data nil, :type => :close if !@pipe_broken
-      emit :close
+      write_data nil, :type => :close rescue nil
     ensure
       @closed = true
       @socket.close if @socket
@@ -133,8 +128,6 @@ module WsClient
           retry
         end
       end
-
-      emit :open if @handshaked
     end
 
     def pull_next_message_off_of_socket(socket, timeout = 10, last_frame = nil)
@@ -170,7 +163,7 @@ module WsClient
           retry
         rescue => e
           close
-          emit :error, e
+          raise
         end
       end
     end
@@ -191,45 +184,9 @@ module WsClient
         rescue IO::WaitWritable, Errno::EINTR
           IO.select(nil, [@socket])
           retry
-        rescue Errno::EPIPE => e
-          @pipe_broken = true
-          close
         rescue => e
           close
-          emit :error, e
-        end
-      end
-    end
-  end
-
-  class AsyncClient < ::WsClient::Client
-    def close
-      return if @closed
-
-      write_data nil, :type => :close if !@pipe_broken
-      emit :close
-    ensure
-      @closed = true
-      @socket.close if @socket
-      @tcp_socket.close if @tcp_socket
-      @socket = nil
-      @tcp_socket = nil
-      Thread.kill @thread if @thread
-    end
-
-    def send_data(data, opt={:type => :text})
-      @thread ||= poll # utilize the polling interface, could probably be split into another class
-      write_data(data, opt)
-    end
-
-    def poll
-      return Thread.new(@socket) do |socket|
-        while !@closed do
-          pull_next_message_off_of_socket(socket)
-
-          message_queue.length.times do
-            emit :message, message_queue.pop
-          end
+          raise
         end
       end
     end
